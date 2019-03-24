@@ -30,23 +30,27 @@ pipeline {
             steps {
                 script {
                     if(params.RELEASE == true) {
-                        if(!params.RELEASE_VERSION){
+                        if(params.RELEASE_VERSION){
+                            env.RELEASE_VERSION = params.RELEASE_VERSION
+                         } else {
                             echo ("Setting release version to ${getBaseVersion()}")
-                            params.RELEASE_VERSION = "1.2.3"
-                            echo ("here")
-                            params.RELEASE_VERSION = getBaseVersion()
+                            env.RELEASE_VERSION = getBaseVersion()
                         }
 
-                        if(!params.RELEASE_TAG){
+                        if(params.RELEASE_TAG){
+                            env.RELEASE_TAG = params.RELEASE_TAG
+                        } else {
                             echo("Setting release tag")
-                            params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
+                            env.RELEASE_TAG = "replication-${env.RELEASE_VERSION}"
                         }
 
-                        if(!params.NEXT_VERSION){
+                        if(params.NEXT_VERSION){
+                            env.NEXT_VERSION = params.NEXT_VERSION
+                        } else {
                             echo("Setting next version")
-                            params.NEXT_VERSION = getDevelopmentVersion()
+                            env.NEXT_VERSION = getDevelopmentVersion()
                         }
-                        echo("Release parameters: release-version: ${params.RELEASE_VERSION} release-tag: ${params.RELEASE_TAG} next-version: ${params.NEXT_VERSION}")
+                        echo("Release parameters: release-version: ${env.RELEASE_VERSION} release-tag: ${env.RELEASE_TAG} next-version: ${env.NEXT_VERSION}")
                     }
                 }
             }
@@ -90,7 +94,7 @@ pipeline {
                         withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
                             script {
                                 if(params.RELEASE == true) {
-                                    sh "mvn -B -Dtag=${params.TAG} -DreleaseVersion=${params.RELEASE_VERSION} -DdevelopmentVersion=${params.NEXT_VERSION} release:prepare"
+                                    sh "mvn -B -Dtag=${env.RELEASE_TAG} -DreleaseVersion=${env.RELEASE_VERSION} -DdevelopmentVersion=${env.NEXT_VERSION} release:prepare"
                                 } else {
                                     sh 'mvn clean install -B $DISABLE_DOWNLOAD_PROGRESS_OPTS'
                                 }
@@ -116,7 +120,7 @@ pipeline {
                             // If this build is not a pull request, run full owasp scan. Otherwise run incremental scan
                             script {
                                 if(params.RELEASE == true) {
-                                    sh 'git co params.TAG'
+                                    sh 'git co env.RELEASE_TAG'
                                 }
                                 if (env.CHANGE_ID == null) {
                                     sh 'mvn install -B -Powasp -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
@@ -143,7 +147,7 @@ pipeline {
                     steps {
                         script {
                             if(params.RELEASE == true) {
-                                sh 'git co params.TAG'
+                                sh 'git co env.RELEASE_TAG'
                             }
                         }
                         withMaven(maven: 'M35', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
@@ -163,7 +167,7 @@ pipeline {
             steps {
                 echo("pushing release tags")
                 //sshagent(['Replication-Release-Key'])
-                //    sh "git push origin && git push origin ${params.RELEASE_TAG}"
+                //    sh "git push origin && git push origin ${env.RELEASE_TAG}"
                 //}
             }
         }
