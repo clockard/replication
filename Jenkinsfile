@@ -31,14 +31,17 @@ pipeline {
                 script {
                     if(params.RELEASE == true) {
                         if(params.RELEASE_VERSION == null){
+                            echo ("Setting release version to ${getBaseVersion()}"
                             params.RELEASE_VERSION = getBaseVersion()
                         }
 
                         if(params.RELEASE_TAG == null){
+                            echo("Setting release tag");
                             params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
                         }
 
                         if(params.NEXT_VERSION == null){
+                            echo("Setting next version");
                             params.NEXT_VERSION = getDevelopmentVersion()
                         }
                         echo("Release parameters: release-version: ${params.RELEASE_VERSION} release-tag: ${params.RELEASE_TAG} next-version: ${params.NEXT_VERSION}")
