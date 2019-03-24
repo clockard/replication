@@ -27,19 +27,21 @@ pipeline {
     }
     stages {
         stage('Calculating build parameters'){
-            if(params.RELEASE == true) {
-                if(params.RELEASE_VERSION == null){
-                    params.RELEASE_VERSION = getBaseVersion()
-                }
+            steps {
+                if(params.RELEASE == true) {
+                    if(params.RELEASE_VERSION == null){
+                        params.RELEASE_VERSION = getBaseVersion()
+                    }
 
-                if(params.RELEASE_TAG == null){
-                    params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
-                }
+                    if(params.RELEASE_TAG == null){
+                        params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
+                    }
 
-                if(params.NEXT_VERSION == null){
-                    params.NEXT_VERSION = getDevelopmentVersion()
+                    if(params.NEXT_VERSION == null){
+                        params.NEXT_VERSION = getDevelopmentVersion()
+                    }
+                    echo("Release parameters: release-version: ${params.RELEASE_VERSION} release-tag: ${params.RELEASE_TAG} next-version: ${params.NEXT_VERSION}")
                 }
-                echo("Release parameters: release-version: ${params.RELEASE_VERSION} release-tag: ${params.RELEASE_TAG} next-version: ${params.NEXT_VERSION}")
             }
         }
         // The incremental build will be triggered only for PRs. It will build the differences between the PR and the target branch
