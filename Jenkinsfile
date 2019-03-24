@@ -80,7 +80,7 @@ pipeline {
                         // TODO: Maven downgraded to work around a linux build issue. Falling back to system java to work around a linux build issue. re-investigate upgrading later
                         withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
                             if(params.RELEASE == true) {
-                                sh "mvn -B -Dtag=${params.TAG} -DreleaseVersion=${params.RELEASE_VERSION} -DdevelopmentVersion=${params.NEXT_VERSION} release:prepare'
+                                sh "mvn -B -Dtag=${params.TAG} -DreleaseVersion=${params.RELEASE_VERSION} -DdevelopmentVersion=${params.NEXT_VERSION} release:prepare"
                             } else {
                                 sh 'mvn clean install -B $DISABLE_DOWNLOAD_PROGRESS_OPTS'
                             }
