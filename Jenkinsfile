@@ -30,17 +30,17 @@ pipeline {
             steps {
                 script {
                     if(params.RELEASE == true) {
-                        if(params.RELEASE_VERSION){
+                        if(!params.RELEASE_VERSION){
                             echo ("Setting release version to ${getBaseVersion()}")
                             params.RELEASE_VERSION = getBaseVersion()
                         }
 
-                        if(params.RELEASE_TAG){
+                        if(!params.RELEASE_TAG){
                             echo("Setting release tag")
                             params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
                         }
 
-                        if(params.NEXT_VERSION){
+                        if(!params.NEXT_VERSION){
                             echo("Setting next version")
                             params.NEXT_VERSION = getDevelopmentVersion()
                         }
