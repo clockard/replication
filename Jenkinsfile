@@ -32,6 +32,8 @@ pipeline {
                     if(params.RELEASE == true) {
                         if(!params.RELEASE_VERSION){
                             echo ("Setting release version to ${getBaseVersion()}")
+                            params.RELEASE_VERSION = "1.2.3"
+                            echo ("here")
                             params.RELEASE_VERSION = getBaseVersion()
                         }
 
