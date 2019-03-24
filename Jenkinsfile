@@ -2,6 +2,12 @@
 //More information can be found on the Jenkins Documentation page https://jenkins.io/doc/
 pipeline {
     agent { label 'linux-small' }
+    parameters {
+            booleanParam(name: 'RELEASE', defaultValue: false, description: 'Perform Release?')
+            string(name: 'RELEASE_VERSION', defaultValue: null, description: 'The version to release. Empty value will release the current version')
+            string(name: 'RELEASE_TAG', defaultValue: null, description: 'The release tag for this version. Empty value will result in replication-RELEASE_VERSION')
+            string(name: 'NEXT_VERSION', defaultValue: null, description: 'The next development version. Empty value will increment the patch version')
+    }
     options {
         buildDiscarder(logRotator(numToKeepStr:'25'))
         disableConcurrentBuilds()
@@ -20,6 +26,22 @@ pipeline {
         DISABLE_DOWNLOAD_PROGRESS_OPTS = '-Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn '
     }
     stages {
+        stage('Calculating build parameters'){
+            if(params.RELEASE == true) {
+                if(params.RELEASE_VERSION == null){
+                    params.RELEASE_VERSION = getBaseVersion()
+                }
+
+                if(params.RELEASE_TAG == null){
+                    params.RELEASE_TAG = "replication-${params.RELEASE_VERSION}"
+                }
+
+                if(params.NEXT_VERSION == null){
+                    params.NEXT_VERSION = getDevelopmentVersion()
+                }
+                echo("Release parameters: release-version: ${params.RELEASE_VERSION} release-tag: ${params.RELEASE_TAG} next-version: ${params.NEXT_VERSION}")
+            }
+        }
         // The incremental build will be triggered only for PRs. It will build the differences between the PR and the target branch
         stage('Incremental Build') {
             when {
@@ -57,7 +79,11 @@ pipeline {
                     steps {
                         // TODO: Maven downgraded to work around a linux build issue. Falling back to system java to work around a linux build issue. re-investigate upgrading later
                         withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
-                            sh 'mvn clean install -B $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                            if(params.RELEASE == true) {
+                                sh "mvn -B -Dtag=${params.TAG} -DreleaseVersion=${params.RELEASE_VERSION} -DdevelopmentVersion=${params.NEXT_VERSION} release:prepare'
+                            } else {
+                                sh 'mvn clean install -B $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                            }
                         }
                     }
                 }
@@ -78,6 +104,9 @@ pipeline {
                         withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
                             // If this build is not a pull request, run full owasp scan. Otherwise run incremental scan
                             script {
+                                if(params.RELEASE == true) {
+                                    sh 'git co params.TAG'
+                                }
                                 if (env.CHANGE_ID == null) {
                                     sh 'mvn install -B -Powasp -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
                                 } else {
@@ -101,6 +130,9 @@ pipeline {
                         }
                     }
                     steps {
+                        if(params.RELEASE == true) {
+                            sh 'git co params.TAG'
+                        }
                         withMaven(maven: 'M35', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
                             withCredentials([string(credentialsId: 'SonarQubeGithubToken', variable: 'SONARQUBE_GITHUB_TOKEN'), string(credentialsId: 'cxbot-sonarcloud', variable: 'SONAR_TOKEN')]) {
                                 script {
@@ -112,6 +144,12 @@ pipeline {
                     }
                 }
             }
+        }
+        stage('Release Tag'){
+            when { expression { params.RELEASE == true } }
+            //sshagent(['Replication-Release-Key'])
+            //    sh "git push origin && git push origin ${params.RELEASE_TAG}"
+            //}
         }
         /*
          Deploy stage will only be executed for deployable branches. These include master and any patch branch matching M.m.x format (i.e. 2.10.x, 2.9.x, etc...).
@@ -126,12 +164,32 @@ pipeline {
                 }
             }
             steps{
-                withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
-                    sh 'mvn javadoc:aggregate -B -DskipStatic=true -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
-                    sh 'mvn deploy -B -DskipStatic=true -DskipTests=true -DretryFailedDeploymentCount=10 -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                if(params.RELEASE == true) {
+                    //sh 'git co params.TAG'
+                    echo( "Would checkout tag for deploy")
                 }
+                //withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
+                //    sh 'mvn javadoc:aggregate -B -DskipStatic=true -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                //    sh 'mvn deploy -B -DskipStatic=true -DskipTests=true -DretryFailedDeploymentCount=10 -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                //}
             }
         }
     }
+}
 
+def getCurrentVersion() {
+    def pom = readMavenPom file: 'pom.xml'
+    return pom.getVersion()
+}
+
+def getBaseVersion() {
+    return getCurrentVersion().split('-')[0]
+}
+
+def getDevelopmentVersion() {
+    def baseVersion = getBaseVersion()
+    def patch = baseVersion.substring(baseVersion.lastIndexOf('.')+1).toInteger()+1
+    def majMin = baseVersion.substring(0, baseVersion.lastIndexOf('.'))
+    def developmentVersion = "${majMin}.${patch}-SNAPSHOT"
+    return developmentVersion
 }
