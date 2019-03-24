@@ -155,9 +155,12 @@ pipeline {
         }
         stage('Release Tag'){
             when { expression { params.RELEASE == true } }
-            //sshagent(['Replication-Release-Key'])
-            //    sh "git push origin && git push origin ${params.RELEASE_TAG}"
-            //}
+            steps {
+                echo("pushing release tags")
+                //sshagent(['Replication-Release-Key'])
+                //    sh "git push origin && git push origin ${params.RELEASE_TAG}"
+                //}
+            }
         }
         /*
          Deploy stage will only be executed for deployable branches. These include master and any patch branch matching M.m.x format (i.e. 2.10.x, 2.9.x, etc...).
