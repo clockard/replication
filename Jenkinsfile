@@ -185,7 +185,7 @@ pipeline {
             steps{
                 script {
                     if(params.RELEASE == true) {
-                        sh "git checkout ${env.RELEASE_TAG}'
+                        sh "git checkout ${env.RELEASE_TAG}"
                     }
                 }
                 //withMaven(maven: 'Maven 3.5.3', jdk: 'jdk8-latest', globalMavenSettingsConfig: 'default-global-settings', mavenSettingsConfig: 'codice-maven-settings', mavenOpts: '${LINUX_MVN_RANDOM}') {
