@@ -28,6 +28,9 @@ pipeline {
     stages {
         stage('Calculating build parameters'){
             steps {
+                sshagent(['Replication-Release-Key']) {
+                    echo("Release key checks out")
+                }
                 script {
                     if(params.RELEASE == true) {
                         if(params.RELEASE_VERSION){
@@ -123,9 +126,9 @@ pipeline {
                                     sh "git checkout ${env.RELEASE_TAG}"
                                 }
                                 if (env.CHANGE_ID == null) {
-                                    sh 'mvn install -B -Powasp -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                                    //sh 'mvn install -B -Powasp -DskipTests=true -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
                                 } else {
-                                    sh 'mvn install -B -Powasp -DskipTests=true  -Dgib.enabled=true -Dgib.referenceBranch=/refs/remotes/origin/$CHANGE_TARGET -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
+                                    //sh 'mvn install -B -Powasp -DskipTests=true  -Dgib.enabled=true -Dgib.referenceBranch=/refs/remotes/origin/$CHANGE_TARGET -nsu $DISABLE_DOWNLOAD_PROGRESS_OPTS'
                                 }
                             }
                         }
@@ -165,9 +168,11 @@ pipeline {
         stage('Release Tag'){
             when { expression { params.RELEASE == true } }
             steps {
-                echo("Pushing release tags and commits")
-                //sh "git push origin && git push origin ${env.RELEASE_TAG}"
-                sh "git push origin ${env.RELEASE_TAG}"
+                sshagent(['Replication-Release-Key']) {
+                    echo("Pushing release tags and commits")
+                    //sh "git push origin && git push origin ${env.RELEASE_TAG}"
+                    sh "git push origin ${env.RELEASE_TAG}"
+                }
             }
         }
         /*
