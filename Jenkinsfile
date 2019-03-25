@@ -167,7 +167,7 @@ pipeline {
             steps {
                 echo("Pushing release tags and commits")
                 //sh "git push origin && git push origin ${env.RELEASE_TAG}"
-                git push origin ${env.RELEASE_TAG}
+                sh "git push origin ${env.RELEASE_TAG}"
             }
         }
         /*
