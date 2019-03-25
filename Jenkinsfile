@@ -169,7 +169,7 @@ pipeline {
             when { expression { params.RELEASE == true } }
             steps {
                 echo("Pushing release tags and commits")
-                sshagent(['Replication-Release-Key'])
+                sshagent(['Replication-Release-Key']) {
                     //sh "git push origin && git push origin ${env.RELEASE_TAG}"
                     echo("Pushing")
                 }
