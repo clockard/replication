@@ -1,7 +1,12 @@
 //"Jenkins Pipeline is a suite of plugins which supports implementing and integrating continuous delivery pipelines into Jenkins. Pipeline provides an extensible set of tools for modeling delivery pipelines "as code" via the Pipeline DSL."
 //More information can be found on the Jenkins Documentation page https://jenkins.io/doc/
 pipeline {
-    agent { label 'linux-small' }
+    agent {
+        node {
+            label 'linux-small'
+            customWorkspace "/jenkins/workspace/${JOB_NAME}/${BUILD_NUMBER}"
+        }
+    }
     parameters {
             booleanParam(name: 'RELEASE', defaultValue: false, description: 'Perform Release?')
             string(name: 'RELEASE_VERSION', defaultValue: null, description: 'The version to release. Empty value will release the current version')
