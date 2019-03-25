@@ -28,7 +28,7 @@ pipeline {
     stages {
         stage('Calculating build parameters'){
             steps {
-                sshagent(['Replication-Release-Key'])
+                sshagent(['Replication-Release-Key']) {
                     echo("Release Key checked out")
                 }
                 script {
