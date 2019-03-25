@@ -28,9 +28,6 @@ pipeline {
     stages {
         stage('Calculating build parameters'){
             steps {
-                sshagent(['Replication-Release-Key']) {
-                    echo("Release Key checked out")
-                }
                 script {
                     if(params.RELEASE == true) {
                         if(params.RELEASE_VERSION){
@@ -169,10 +166,8 @@ pipeline {
             when { expression { params.RELEASE == true } }
             steps {
                 echo("Pushing release tags and commits")
-                sshagent(['Replication-Release-Key']) {
-                    //sh "git push origin && git push origin ${env.RELEASE_TAG}"
-                    echo("Pushing")
-                }
+                //sh "git push origin && git push origin ${env.RELEASE_TAG}"
+                git push origin ${env.RELEASE_TAG}
             }
         }
         /*
