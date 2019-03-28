@@ -50,7 +50,7 @@
         <thirdparty.ogc.version>1.1.0_5</thirdparty.ogc.version>
         <ogc.tools.version>1.0.3</ogc.tools.version>
         <jts.version>1.14.0</jts.version>
-        <jaxb.version>0.9.4</jaxb.version>
+        <jaxb.version>1.11.1-PUBLISHED-BY-MISTAKE</jaxb.version>
         <cxf.frontent.version>3.2.5</cxf.frontent.version>
         <validation.version>1.1.0.Final</validation.version>
         <xstream.version>1.4.9</xstream.version>
