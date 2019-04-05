@@ -13,58 +13,16 @@
  */
 package org.codice.ditto.replication.api.impl;
 
-import com.google.common.base.Splitter;
-import com.google.common.io.ByteSource;
-import ddf.catalog.Constants;
-import ddf.catalog.content.data.ContentItem;
-import ddf.catalog.content.data.impl.ContentItemImpl;
-import ddf.catalog.content.operation.impl.CreateStorageRequestImpl;
-import ddf.catalog.content.operation.impl.UpdateStorageRequestImpl;
 import ddf.catalog.core.versioning.MetacardVersion;
-import ddf.catalog.data.Attribute;
-import ddf.catalog.data.Metacard;
-import ddf.catalog.data.Result;
-import ddf.catalog.data.impl.AttributeImpl;
 import ddf.catalog.data.types.Core;
 import ddf.catalog.filter.FilterBuilder;
 import ddf.catalog.filter.impl.SortByImpl;
-import ddf.catalog.operation.CreateResponse;
-import ddf.catalog.operation.DeleteRequest;
-import ddf.catalog.operation.DeleteResponse;
-import ddf.catalog.operation.OperationTransaction.OperationType;
-import ddf.catalog.operation.QueryRequest;
-import ddf.catalog.operation.Response;
-import ddf.catalog.operation.UpdateRequest;
-import ddf.catalog.operation.UpdateResponse;
-import ddf.catalog.operation.impl.CreateRequestImpl;
-import ddf.catalog.operation.impl.DeleteRequestImpl;
-import ddf.catalog.operation.impl.OperationTransactionImpl;
-import ddf.catalog.operation.impl.QueryImpl;
-import ddf.catalog.operation.impl.QueryRequestImpl;
-import ddf.catalog.operation.impl.UpdateRequestImpl;
-import ddf.catalog.resource.Resource;
-import ddf.catalog.resource.ResourceNotFoundException;
-import ddf.catalog.resource.ResourceNotSupportedException;
-import ddf.catalog.source.IngestException;
 import ddf.catalog.source.SourceUnavailableException;
-import ddf.catalog.source.UnsupportedQueryException;
-import ddf.catalog.util.impl.ResultIterable;
-import ddf.security.SubjectUtils;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Serializable;
-import java.net.URI;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.shiro.SecurityUtils;
 import org.codice.ditto.replication.api.ReplicationException;
 import org.codice.ditto.replication.api.ReplicationItem;
 import org.codice.ditto.replication.api.ReplicationPersistentStore;
@@ -72,8 +30,14 @@ import org.codice.ditto.replication.api.ReplicationStatus;
 import org.codice.ditto.replication.api.ReplicationStore;
 import org.codice.ditto.replication.api.ReplicatorHistory;
 import org.codice.ditto.replication.api.Status;
+import org.codice.ditto.replication.api.data.ReplicationMetadata;
 import org.codice.ditto.replication.api.data.ReplicatorConfig;
+import org.codice.ditto.replication.api.impl.operation.QueryImpl;
+import org.codice.ditto.replication.api.impl.operation.ResourceImpl;
+import org.codice.ditto.replication.api.impl.operation.ResultIterable;
 import org.codice.ditto.replication.api.mcard.Replication;
+import org.codice.ditto.replication.api.operation.Query;
+import org.codice.ditto.replication.api.operation.ResourceResponse;
 import org.geotools.filter.text.cql2.CQLException;
 import org.geotools.filter.text.ecql.ECQL;
 import org.opengis.filter.Filter;
@@ -101,7 +65,7 @@ class SyncHelper {
 
   private final FilterBuilder builder;
 
-  private Metacard mcard;
+  private ReplicationMetadata mcard;
 
   private Optional<ReplicationItem> existingReplicationItem;
 
@@ -130,8 +94,8 @@ class SyncHelper {
     this.persistentStore = persistentStore;
     this.history = history;
     this.builder = builder;
-    this.sourceName = source.getRemoteName();
-    this.destinationName = destination.getRemoteName();
+    this.sourceName = source.getSystemName();
+    this.destinationName = destination.getSystemName();
     syncCount = 0;
     failCount = 0;
     bytesTransferred = 0;
@@ -139,11 +103,11 @@ class SyncHelper {
 
   @SuppressWarnings("squid:S3655" /*isUpdatable performs the needed optional check*/)
   public SyncResponse sync() {
-    for (Result metacardResult : getMetacardChangeSet()) {
+    for (ReplicationMetadata metadata : getMetacardChangeSet()) {
       if (canceled) {
         break;
       }
-      mcard = metacardResult.getMetacard();
+      mcard = metadata;
       existingReplicationItem = persistentStore.getItem(mcard.getId(), sourceName, destinationName);
 
       try {
@@ -180,18 +144,12 @@ class SyncHelper {
     return this.canceled;
   }
 
-  private Iterable<Result> getMetacardChangeSet() {
+  private Iterable<ReplicationMetadata> getMetacardChangeSet() {
     Filter filter = buildFilter();
 
-    final QueryRequest request =
-        new QueryRequestImpl(
-            new QueryImpl(
-                filter,
-                1,
-                100,
-                new SortByImpl(Core.METACARD_MODIFIED, SortOrder.ASCENDING),
-                false,
-                0L));
+    final Query request =
+        new QueryImpl(
+            filter, 1, 100, new SortByImpl(Core.METACARD_MODIFIED, SortOrder.ASCENDING), false, 0L);
     return ResultIterable.resultIterable(source::query, request);
   }
 
@@ -240,7 +198,6 @@ class SyncHelper {
     final List<Filter> filters = new ArrayList<>();
     filters.add(
         builder.not(builder.attribute(Replication.ORIGINS).is().equalTo().text(destinationName)));
-    filters.add(builder.attribute(Core.METACARD_TAGS).is().equalTo().text(Metacard.DEFAULT_TAG));
     return filters;
   }
 
@@ -264,25 +221,16 @@ class SyncHelper {
   }
 
   private boolean isDeletedMetacard() {
-    return Optional.ofNullable(mcard.getAttribute(MetacardVersion.ACTION))
-        .filter(type -> type.getValue().toString().startsWith("Deleted"))
-        .isPresent();
+    return mcard.getTags().contains("revision");
   }
 
-  private void processDeletedMetacard() throws IngestException {
-    String mcardId = (String) mcard.getAttribute(MetacardVersion.VERSION_OF_ID).getValue();
+  private void processDeletedMetacard() {
+    String mcardId = mcard.getId();
     existingReplicationItem = persistentStore.getItem(mcardId, sourceName, destinationName);
 
     if (existingReplicationItem.isPresent()) {
-      final DeleteRequest deleteRequest = new DeleteRequestImpl(mcardId);
 
-      // adding the operation transaction to avoid NPE when forming the response in AbstractCSWStore
-      deleteRequest
-          .getProperties()
-          .put(
-              Constants.OPERATION_TRANSACTION_KEY,
-              new OperationTransactionImpl(OperationType.DELETE, Collections.singletonList(mcard)));
-      final DeleteResponse deleteResponse = destination.delete(deleteRequest);
+      final ResourceResponse deleteResponse = destination.delete(new ResourceImpl(mcard));
       checkForProcessingErrors(deleteResponse, "DeleteRequest");
 
       // remove oldReplicationItem from the store if the deleteRequest is successful
@@ -303,19 +251,16 @@ class SyncHelper {
   private boolean metacardExists(String id, ReplicationStore store) {
     try {
       return store
-              .query(
-                  new QueryRequestImpl(
-                      new QueryImpl(builder.attribute(Core.ID).is().equalTo().text(id))))
-              .getHits()
+              .query(new QueryImpl(builder.attribute(Core.ID).is().equalTo().text(id)))
+              .getTotalHits()
           > 0;
-    } catch (UnsupportedOperationException | UnsupportedQueryException e) {
+    } catch (UnsupportedOperationException e) {
       throw new ReplicationException(
-          "Error checking for the existence of metacard " + id + " on " + store.getRemoteName());
+          "Error checking for the existence of metacard " + id + " on " + store.getSystemName());
     }
   }
 
-  private void processUpdate(ReplicationItem replicationItem)
-      throws IngestException, SourceUnavailableException {
+  private void processUpdate(ReplicationItem replicationItem) {
     prepMetacard();
     if (resourceShouldBeUpdated(replicationItem)) {
       performResourceUpdate();
@@ -327,166 +272,63 @@ class SyncHelper {
   }
 
   private boolean resourceShouldBeUpdated(ReplicationItem replicationItem) {
-    boolean hasResource = mcard.getResourceURI() != null;
-    Date resourceModified = mcard.getModifiedDate();
+    boolean hasResource = mcard.getResourceUri() != null;
+    Date resourceModified = mcard.getLastModified();
     return hasResource
         && (resourceModified.after(replicationItem.getResourceModified())
             || replicationItem.getFailureCount() > 0);
   }
 
-  private void performResourceUpdate() throws IngestException, SourceUnavailableException {
-    final ContentItem contentItem = getResourceContentForMetacard();
-    final UpdateResponse updateResponse =
-        destination.update(
-            new UpdateStorageRequestImpl(Collections.singletonList(contentItem), new HashMap<>()));
+  private void performResourceUpdate() {
+    final ResourceResponse updateResponse = destination.update(new ResourceImpl(mcard));
     checkForProcessingErrors(updateResponse, "UpdateStorageRequest");
-    long bytes = Long.parseLong(mcard.getResourceSize());
+    long bytes = mcard.getSize();
     bytesTransferred += bytes;
     recordSuccessfulReplication();
     status.incrementBytesTransferred(bytes);
   }
 
   private boolean metacardShouldBeUpdated(ReplicationItem replicationItem) {
-    Date metacardModified = (Date) mcard.getAttribute(Core.METACARD_MODIFIED).getValue();
+    Date metacardModified = mcard.getMetadataLastModified();
     return metacardModified.after(replicationItem.getMetacardModified())
         || replicationItem.getFailureCount() > 0;
   }
 
-  private void performMetacardUpdate() throws IngestException {
-    final UpdateRequest updateRequest = new UpdateRequestImpl(mcard.getId(), mcard);
-
-    // adding the operation transaction to avoid NPE when forming the response in AbstractCSWStore
-    updateRequest
-        .getProperties()
-        .put(
-            Constants.OPERATION_TRANSACTION_KEY,
-            new OperationTransactionImpl(OperationType.UPDATE, Collections.singletonList(mcard)));
-    final UpdateResponse updateResponse = destination.update(updateRequest);
+  private void performMetacardUpdate() {
+    final ResourceResponse updateResponse = destination.update(new ResourceImpl(mcard));
     checkForProcessingErrors(updateResponse, "UpdateRequest");
     recordSuccessfulReplication();
   }
 
   private void logMetacardSkipped() {
     LOGGER.trace(
-        "Not updating product (id = {}, hasResource = {}, metacard modified = {}, resource modified = {}, existing replication item: {})",
+        "Not updating product (id = {}, hasResource = {}, resource modified = {}, existing replication item: {})",
         mcard.getId(),
-        mcard.getResourceURI() != null,
-        mcard.getAttribute(Core.METACARD_MODIFIED).getValue(),
-        mcard.getModifiedDate(),
+        mcard.getResourceUri() != null,
+        mcard.getLastModified(),
         existingReplicationItem);
   }
 
-  private void processCreate() throws IngestException, SourceUnavailableException {
-    boolean hasResource = mcard.getResourceURI() != null;
+  private void processCreate() {
     prepMetacard();
 
-    if (hasResource) {
-      performResourceCreate();
-    } else {
-      performMetacardCreate();
-    }
+    performResourceCreate();
+
     recordSuccessfulReplication();
   }
 
-  private void performResourceCreate() throws IngestException, SourceUnavailableException {
-    final ContentItem contentItem = getResourceContentForMetacard();
-    final CreateResponse createResponse =
-        destination.create(
-            new CreateStorageRequestImpl(Collections.singletonList(contentItem), new HashMap<>()));
+  private void performResourceCreate() {
+    final ResourceResponse createResponse = destination.create(new ResourceImpl(mcard));
     checkForProcessingErrors(createResponse, "CreateStorageRequest");
-    long bytes = Long.parseLong(mcard.getResourceSize());
+    long bytes = mcard.getSize();
     bytesTransferred += bytes;
     status.incrementBytesTransferred(bytes);
   }
 
-  private void performMetacardCreate() throws IngestException {
-    final CreateResponse createResponse = destination.create(new CreateRequestImpl(mcard));
-    checkForProcessingErrors(createResponse, "CreateRequest");
-  }
-
   private void prepMetacard() {
-    List<Serializable> origins = new ArrayList<>();
-    Attribute currentOrigins = mcard.getAttribute(Replication.ORIGINS);
-    if (currentOrigins != null) {
-      origins.addAll(currentOrigins.getValues());
-    }
 
-    origins.add(source.getRemoteName());
-    mcard.setAttribute(new AttributeImpl(Replication.ORIGINS, origins));
-
-    Set<Serializable> tags = new HashSet<>(mcard.getTags());
-    tags.add(Replication.REPLICATED_TAG);
-    List<Serializable> tagList = new ArrayList<>(tags);
-    mcard.setAttribute(new AttributeImpl(Metacard.TAGS, tagList));
-    mcard.setAttribute(
-        new AttributeImpl(
-            Metacard.POINT_OF_CONTACT, SubjectUtils.getEmailAddress(SecurityUtils.getSubject())));
-    // We are not transferring derived resources at this point so remove the derived uri/urls
-    mcard.setAttribute(
-        new AttributeImpl(Metacard.DERIVED_RESOURCE_DOWNLOAD_URL, (Serializable) null));
-    mcard.setAttribute(new AttributeImpl(Metacard.DERIVED_RESOURCE_URI, (Serializable) null));
-  }
-
-  private ContentItem getResourceContentForMetacard() throws IngestException {
-    URI uri = mcard.getResourceURI();
-    Resource resource = getResource(uri);
-    ByteSource byteSource =
-        new ByteSource() {
-          @Override
-          public InputStream openStream() {
-            return resource.getInputStream();
-          }
-        };
-
-    String qualifier = getQualifier(uri);
-    ContentItem item =
-        new ContentItemImpl(
-            mcard.getId(),
-            qualifier,
-            byteSource,
-            resource.getMimeTypeValue(),
-            resource.getName() == null && qualifier != null
-                ? qualifier + ".bin"
-                : resource.getName(),
-            resource.getSize(),
-            mcard);
-    if (qualifier != null) {
-      addDerivedResourceUriToMetacard(item);
-    }
-    return item;
-  }
-
-  private Resource getResource(URI uri) throws IngestException {
-    String mcardId = mcard.getId();
-    Map<String, Serializable> properties = new HashMap<>();
-    properties.put(Core.ID, mcardId);
-    try {
-      return source.retrieveResource(uri, properties).getResource();
-    } catch (ResourceNotFoundException | ResourceNotSupportedException | IOException e) {
-      throw new IngestException("Failed to retrieve resource for metacard " + mcardId, e);
-    }
-  }
-
-  private String getQualifier(URI uri) {
-    String qualifier = uri.getFragment();
-    if (qualifier == null && uri.getQuery() != null) {
-      Map<String, String> map =
-          Splitter.on('&').trimResults().withKeyValueSeparator("=").split(uri.getQuery());
-      qualifier = map.get("qualifier");
-    }
-    return qualifier;
-  }
-
-  private void addDerivedResourceUriToMetacard(ContentItem contentItem) {
-    Attribute attribute = mcard.getAttribute(Core.DERIVED_RESOURCE_URI);
-    if (attribute == null) {
-      attribute = new AttributeImpl(Core.DERIVED_RESOURCE_URI, contentItem.getUri());
-    } else {
-      AttributeImpl newAttribute = new AttributeImpl(attribute);
-      newAttribute.addValue(contentItem.getUri());
-      attribute = newAttribute;
-    }
-    mcard.setAttribute(attribute);
+    mcard.getOrigins().add(source.getSystemName());
+    mcard.getTags().add(Replication.REPLICATED_TAG);
   }
 
   private void recordSuccessfulReplication() {
@@ -495,10 +337,9 @@ class SyncHelper {
     status.incrementCount();
   }
 
-  private void checkForProcessingErrors(Response response, String requestType)
-      throws IngestException {
-    if (CollectionUtils.isNotEmpty(response.getProcessingErrors())) {
-      throw new IngestException("Processing errors when submitting a " + requestType);
+  private void checkForProcessingErrors(ResourceResponse response, String requestType) {
+    if (CollectionUtils.isNotEmpty(response.getErrors())) {
+      throw new ReplicationException("Processing errors when submitting a " + requestType);
     }
   }
 
@@ -532,8 +373,8 @@ class SyncHelper {
 
   private ReplicationItem createReplicationItem() {
     String mcardId = mcard.getId();
-    Date resourceModified = mcard.getModifiedDate();
-    Date metacardModified = (Date) mcard.getAttribute(Core.METACARD_MODIFIED).getValue();
+    Date resourceModified = mcard.getLastModified();
+    Date metacardModified = mcard.getMetadataLastModified();
 
     return new ReplicationItemImpl(
         mcardId,

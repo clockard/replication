@@ -44,7 +44,6 @@ import java.util.Optional;
 import org.apache.shiro.util.ThreadContext;
 import org.codice.ditto.replication.api.ReplicationPersistentStore;
 import org.codice.ditto.replication.api.ReplicationStatus;
-import org.codice.ditto.replication.api.ReplicationStore;
 import org.codice.ditto.replication.api.ReplicatorHistory;
 import org.codice.ditto.replication.api.Status;
 import org.codice.ditto.replication.api.data.ReplicatorConfig;
@@ -60,8 +59,8 @@ public class SyncHelperTest {
 
   SyncHelper helper;
 
-  @Mock ReplicationStore source;
-  @Mock ReplicationStore destination;
+  @Mock HybridStore source;
+  @Mock HybridStore destination;
   @Mock ReplicatorConfig config;
   @Mock ReplicationPersistentStore persistentStore;
   @Mock ReplicatorHistory history;
@@ -72,8 +71,8 @@ public class SyncHelperTest {
   public void setUp() throws Exception {
     FilterBuilder builder = new GeotoolsFilterBuilder();
     status = new ReplicationStatusImpl("test");
-    when(source.getRemoteName()).thenReturn("local");
-    when(destination.getRemoteName()).thenReturn("remote");
+    when(source.getSystemName()).thenReturn("local");
+    when(destination.getSystemName()).thenReturn("remote");
     helper = new SyncHelper(source, destination, config, status, persistentStore, history, builder);
   }
 

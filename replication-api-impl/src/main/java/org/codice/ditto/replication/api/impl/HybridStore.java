@@ -14,22 +14,36 @@
 package org.codice.ditto.replication.api.impl;
 
 import com.google.common.base.Splitter;
+import com.google.common.io.ByteSource;
 import com.thoughtworks.xstream.converters.Converter;
+import ddf.catalog.Constants;
 import ddf.catalog.content.data.ContentItem;
+import ddf.catalog.content.data.impl.ContentItemImpl;
 import ddf.catalog.content.operation.CreateStorageRequest;
 import ddf.catalog.content.operation.UpdateStorageRequest;
+import ddf.catalog.content.operation.impl.CreateStorageRequestImpl;
+import ddf.catalog.content.operation.impl.UpdateStorageRequestImpl;
 import ddf.catalog.data.BinaryContent;
 import ddf.catalog.data.Metacard;
+import ddf.catalog.data.Result;
+import ddf.catalog.data.impl.AttributeImpl;
 import ddf.catalog.data.types.Core;
+import ddf.catalog.data.types.Media;
 import ddf.catalog.operation.CreateResponse;
+import ddf.catalog.operation.DeleteRequest;
+import ddf.catalog.operation.DeleteResponse;
+import ddf.catalog.operation.OperationTransaction.OperationType;
 import ddf.catalog.operation.ProcessingDetails;
 import ddf.catalog.operation.Query;
 import ddf.catalog.operation.QueryRequest;
 import ddf.catalog.operation.ResourceResponse;
 import ddf.catalog.operation.SourceResponse;
+import ddf.catalog.operation.UpdateRequest;
 import ddf.catalog.operation.UpdateResponse;
 import ddf.catalog.operation.impl.CreateRequestImpl;
 import ddf.catalog.operation.impl.CreateResponseImpl;
+import ddf.catalog.operation.impl.DeleteRequestImpl;
+import ddf.catalog.operation.impl.OperationTransactionImpl;
 import ddf.catalog.operation.impl.ProcessingDetailsImpl;
 import ddf.catalog.operation.impl.QueryImpl;
 import ddf.catalog.operation.impl.QueryRequestImpl;
@@ -44,6 +58,7 @@ import ddf.catalog.source.UnsupportedQueryException;
 import ddf.catalog.transform.CatalogTransformerException;
 import ddf.catalog.transform.MetacardTransformer;
 import ddf.security.SecurityConstants;
+import ddf.security.SubjectUtils;
 import ddf.security.encryption.EncryptionService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,12 +68,15 @@ import java.net.URL;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
@@ -71,6 +89,7 @@ import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.ContentDisposition;
 import org.apache.cxf.jaxrs.ext.multipart.MultipartBody;
 import org.apache.cxf.jaxrs.impl.MetadataMap;
+import org.apache.shiro.SecurityUtils;
 import org.codice.ddf.cxf.client.ClientFactoryFactory;
 import org.codice.ddf.cxf.client.SecureCxfClientFactory;
 import org.codice.ddf.endpoints.rest.RESTService;
@@ -80,6 +99,11 @@ import org.codice.ddf.spatial.ogc.csw.catalog.common.CswSourceConfiguration;
 import org.codice.ddf.spatial.ogc.csw.catalog.common.source.AbstractCswStore;
 import org.codice.ditto.replication.api.ReplicationException;
 import org.codice.ditto.replication.api.ReplicationStore;
+import org.codice.ditto.replication.api.data.ReplicationMetadata;
+import org.codice.ditto.replication.api.impl.data.MetadataImpl;
+import org.codice.ditto.replication.api.impl.operation.QueryResponseImpl;
+import org.codice.ditto.replication.api.mcard.Replication;
+import org.codice.ditto.replication.api.operation.QueryResponse;
 import org.opengis.filter.Filter;
 import org.osgi.framework.BundleContext;
 
@@ -159,8 +183,7 @@ public class HybridStore extends AbstractCswStore implements ReplicationStore {
       throw new ResourceNotFoundException(
           "Error retrieving resource. Code " + response.getStatus());
     }
-    // TODO: There is a ECP bug that will cause this not to work unless the /services/catalog
-    // endpoint doesn't use the IDP
+
     String filename = null;
     if (response.getHeaderString(CONTENT_DISPOSITION) != null) {
       filename =
@@ -182,7 +205,6 @@ public class HybridStore extends AbstractCswStore implements ReplicationStore {
     return qualifier;
   }
 
-  @Override
   public CreateResponse create(CreateStorageRequest createStorageRequest) throws IngestException {
     List<Metacard> createdMetacards = new ArrayList<>();
     List<Metacard> originalMetacards = new ArrayList<>();
@@ -205,7 +227,6 @@ public class HybridStore extends AbstractCswStore implements ReplicationStore {
         exceptions);
   }
 
-  @Override
   public UpdateResponse update(UpdateStorageRequest updateStorageRequest) throws IngestException {
     List<Metacard> updatedMetacards = new ArrayList<>();
     List<Metacard> originalMetacards = new ArrayList<>();
@@ -237,7 +258,7 @@ public class HybridStore extends AbstractCswStore implements ReplicationStore {
   }
 
   @Override
-  public String getRemoteName() {
+  public String getSystemName() {
     if (remoteName != null) {
       return remoteName;
     }
@@ -357,12 +378,238 @@ public class HybridStore extends AbstractCswStore implements ReplicationStore {
   }
 
   @Override
+  public QueryResponse query(org.codice.ditto.replication.api.operation.Query query) {
+    QueryRequest request =
+        new QueryRequestImpl(
+            new QueryImpl(
+                query,
+                query.getStartIndex(),
+                query.getPageSize(),
+                query.getSortBy(),
+                query.requestsTotalResultsCount(),
+                query.getTimeoutMillis()));
+    try {
+      SourceResponse sourceResponse = this.query(request);
+      QueryResponseImpl response = new QueryResponseImpl();
+      response.setTotalHits(sourceResponse.getHits());
+      response.setResults(
+          sourceResponse
+              .getResults()
+              .stream()
+              .map(Result::getMetacard)
+              .map(this::convertMetacardToMetadata)
+              .collect(Collectors.toList()));
+      return response;
+    } catch (UnsupportedQueryException e) {
+      throw new ReplicationException(e);
+    }
+  }
+
+  @Override
+  public org.codice.ditto.replication.api.operation.ResourceResponse create(
+      org.codice.ditto.replication.api.operation.Resource resource) {
+
+    try {
+      Metacard metacard = convertMetadataToMetacard(resource.getMetadata());
+      CreateResponse response;
+      if (resource.getMetadata().getResourceUri() != null) {
+        ContentItem item = getResourceContentForMetacard(metacard, resource);
+        CreateStorageRequest request =
+            new CreateStorageRequestImpl(Collections.singletonList(item), new HashMap<>());
+        response = this.create(request);
+      } else {
+        response = this.create(new CreateRequestImpl(metacard));
+      }
+      if (response.getCreatedMetacards().isEmpty()) {
+        throw new ReplicationException("Failed to create metacard/resource on remote host");
+      }
+      return new org.codice.ditto.replication.api.impl.operation.ResourceResponseImpl(
+          new org.codice.ditto.replication.api.impl.operation.ResourceImpl(
+              convertMetacardToMetadata(response.getCreatedMetacards().get(0))),
+          response
+              .getProcessingErrors()
+              .stream()
+              .map(e -> e.getException().toString())
+              .collect(Collectors.toList()));
+    } catch (IOException | IngestException e) {
+      throw new ReplicationException(e);
+    }
+  }
+
+  @Override
+  public org.codice.ditto.replication.api.operation.ResourceResponse update(
+      org.codice.ditto.replication.api.operation.Resource resource) {
+    try {
+      Metacard metacard = convertMetadataToMetacard(resource.getMetadata());
+      UpdateResponse response;
+      if (resource.getMetadata().getResourceUri() != null) {
+        ContentItem item = getResourceContentForMetacard(metacard, resource);
+        UpdateStorageRequest request =
+            new UpdateStorageRequestImpl(Collections.singletonList(item), new HashMap<>());
+        response = this.update(request);
+      } else {
+        // adding the operation transaction to avoid NPE when forming the response in
+        // AbstractCSWStore
+        UpdateRequest updateRequest = new UpdateRequestImpl(metacard.getId(), metacard);
+        updateRequest
+            .getProperties()
+            .put(
+                Constants.OPERATION_TRANSACTION_KEY,
+                new OperationTransactionImpl(
+                    OperationType.UPDATE, Collections.singletonList(metacard)));
+        response = this.update(updateRequest);
+      }
+      if (response.getUpdatedMetacards().isEmpty()) {
+        throw new ReplicationException("Failed to update metacard/resource on remote host");
+      }
+      return new org.codice.ditto.replication.api.impl.operation.ResourceResponseImpl(
+          new org.codice.ditto.replication.api.impl.operation.ResourceImpl(
+              convertMetacardToMetadata(response.getUpdatedMetacards().get(0).getNewMetacard())),
+          response
+              .getProcessingErrors()
+              .stream()
+              .map(e -> e.getException().toString())
+              .collect(Collectors.toList()));
+    } catch (IOException | IngestException e) {
+      throw new ReplicationException(e);
+    }
+  }
+
+  @Override
+  public org.codice.ditto.replication.api.operation.ResourceResponse delete(
+      org.codice.ditto.replication.api.operation.Resource resource) {
+    try {
+      Metacard metacard = convertMetadataToMetacard(resource.getMetadata());
+      DeleteRequest deleteRequest = new DeleteRequestImpl(resource.getId());
+      // adding the operation transaction to avoid NPE when forming the response in AbstractCSWStore
+      deleteRequest
+          .getProperties()
+          .put(
+              Constants.OPERATION_TRANSACTION_KEY,
+              new OperationTransactionImpl(
+                  OperationType.DELETE, Collections.singletonList(metacard)));
+      DeleteResponse response = this.delete(deleteRequest);
+      if (response.getDeletedMetacards().isEmpty()) {
+        throw new ReplicationException("Failed to delete metacard/resource on remote host");
+      }
+      return new org.codice.ditto.replication.api.impl.operation.ResourceResponseImpl(
+          new org.codice.ditto.replication.api.impl.operation.ResourceImpl(
+              convertMetacardToMetadata(response.getDeletedMetacards().get(0))),
+          response
+              .getProcessingErrors()
+              .stream()
+              .map(e -> e.getException().toString())
+              .collect(Collectors.toList()));
+    } catch (IngestException e) {
+      throw new ReplicationException(e);
+    }
+  }
+
+  @Override
+  public org.codice.ditto.replication.api.operation.Resource retrieveResource(
+      ReplicationMetadata metadata) {
+    String mcardId = metadata.getId();
+    Map<String, Serializable> properties = new HashMap<>();
+    properties.put(Core.ID, mcardId);
+    try {
+      Resource response =
+          this.retrieveResource(metadata.getResourceUri(), properties).getResource();
+      return new org.codice.ditto.replication.api.impl.operation.ResourceImpl(
+          mcardId,
+          new ByteSource() {
+            @Override
+            public InputStream openStream() {
+              return response.getInputStream();
+            }
+          },
+          response.getMimeTypeValue(),
+          metadata);
+    } catch (ResourceNotFoundException e) {
+      throw new ReplicationException("Failed to retrieve resource for metacard " + mcardId, e);
+    }
+  }
+
+  @Override
   public boolean isAvailable() {
     return (getCapabilities() != null);
   }
 
   @Override
+  public boolean isWritable() {
+    return true;
+  }
+
+  @Override
   public void close() {
     destroy(100);
+  }
+
+  private ReplicationMetadata convertMetacardToMetadata(Metacard mcard) {
+    MetadataImpl metadata = new MetadataImpl();
+    metadata
+        .id(mcard.getId())
+        .lastModified(mcard.getModifiedDate())
+        .metadataLastModified((Date) mcard.getAttribute(Core.METACARD_MODIFIED).getValue())
+        .origins(
+            mcard
+                .getAttribute(Replication.ORIGINS)
+                .getValues()
+                .stream()
+                .map(String.class::cast)
+                .collect(Collectors.toList()))
+        .tags(mcard.getTags())
+        .uri(mcard.getResourceURI())
+        .metadata(mcard);
+    if (mcard.getResourceSize() != null) {
+      metadata.size(Long.parseLong(mcard.getResourceSize()));
+    }
+
+    if (mcard.getAttribute(Media.TYPE) != null) {
+      metadata.mimeType((String) mcard.getAttribute(Media.TYPE).getValue());
+    }
+
+    return metadata;
+  }
+
+  private Metacard convertMetadataToMetacard(ReplicationMetadata metadata) {
+    Metacard mcard = (Metacard) metadata.getRawMetadata();
+    mcard.setAttribute(
+        new AttributeImpl(
+            Core.METACARD_TAGS, metadata.getTags().stream().collect(Collectors.toList())));
+    mcard.setAttribute(
+        new AttributeImpl(
+            Replication.ORIGINS, metadata.getOrigins().stream().collect(Collectors.toList())));
+    mcard.setAttribute(
+        new AttributeImpl(
+            Metacard.POINT_OF_CONTACT, SubjectUtils.getEmailAddress(SecurityUtils.getSubject())));
+    // We are not transferring derived resources at this point so remove the derived uri/urls
+    mcard.setAttribute(
+        new AttributeImpl(Metacard.DERIVED_RESOURCE_DOWNLOAD_URL, (Serializable) null));
+    mcard.setAttribute(new AttributeImpl(Metacard.DERIVED_RESOURCE_URI, (Serializable) null));
+    return mcard;
+  }
+
+  private ContentItem getResourceContentForMetacard(
+      Metacard mcard, org.codice.ditto.replication.api.operation.Resource resource)
+      throws IOException {
+    URI uri = mcard.getResourceURI();
+    ByteSource byteSource =
+        new ByteSource() {
+          @Override
+          public InputStream openStream() {
+            return resource.getInputStream();
+          }
+        };
+
+    String qualifier = getQualifier(uri);
+
+    return new ContentItemImpl(
+        mcard.getId(),
+        qualifier,
+        byteSource,
+        resource.getMimeTypeRawData(),
+        null,
+        resource.getSize(),
+        mcard);
   }
 }

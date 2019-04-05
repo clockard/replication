@@ -14,8 +14,28 @@
 package org.codice.ditto.replication.api;
 
 import java.io.Closeable;
+import java.io.IOException;
+import org.codice.ditto.replication.api.data.ReplicationMetadata;
+import org.codice.ditto.replication.api.operation.Query;
+import org.codice.ditto.replication.api.operation.QueryResponse;
+import org.codice.ditto.replication.api.operation.Resource;
+import org.codice.ditto.replication.api.operation.ResourceResponse;
 
-public interface ReplicationStore extends CatalogResourceStore, Closeable {
+public interface ReplicationStore extends Closeable {
 
-  String getRemoteName();
+  QueryResponse query(Query query);
+
+  ResourceResponse create(Resource resource);
+
+  ResourceResponse update(Resource resource);
+
+  ResourceResponse delete(Resource resource);
+
+  Resource retrieveResource(ReplicationMetadata metadata) throws IOException;
+
+  boolean isAvailable();
+
+  boolean isWritable();
+
+  String getSystemName();
 }
