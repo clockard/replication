@@ -77,6 +77,7 @@ public class ReplicatorStoreFactoryImpl implements ReplicatorStoreFactory {
 
   private ClientFactoryFactory clientFactoryFactory;
 
+  @Override
   public ReplicationStore createReplicatorStore(URL url) {
 
     CswSourceConfiguration cswConfiguration = new CswSourceConfiguration(encryptionService);
