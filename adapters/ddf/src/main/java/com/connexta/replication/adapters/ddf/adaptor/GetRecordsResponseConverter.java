@@ -19,9 +19,12 @@ import com.thoughtworks.xstream.converters.MarshallingContext;
 import com.thoughtworks.xstream.converters.UnmarshallingContext;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import javax.measure.converter.ConversionException;
-import org.codice.ddf.spatial.ogc.csw.catalog.converter.XStreamAttributeCopier;
+import org.apache.commons.lang.StringUtils;
 import org.codice.ditto.replication.api.data.Metadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +90,7 @@ public class GetRecordsResponseConverter implements Converter {
     CswRecordCollection cswRecords = new CswRecordCollection();
     List<Metadata> metacards = cswRecords.getCswRecords();
 
-    XStreamAttributeCopier.copyXmlNamespaceDeclarationsIntoContext(reader, context);
+    copyXmlNamespaceDeclarationsIntoContext(reader, context);
     while (reader.hasMoreChildren()) {
       reader.moveDown();
 
@@ -133,5 +136,40 @@ public class GetRecordsResponseConverter implements Converter {
     LOGGER.debug("numberOfRecordsReturned = {}", numberOfRecordsReturned);
     cswRecords.setNumberOfRecordsMatched(Long.parseLong(numberOfRecordsMatched));
     cswRecords.setNumberOfRecordsReturned(Long.parseLong(numberOfRecordsReturned));
+  }
+
+  /**
+   * Copies the namespace declarations on the XML element {@code reader} is currently at into {@code
+   * context}. The namespace declarations will be available in {@code context} at the key {@link
+   * org.codice.ddf.spatial.ogc.csw.catalog.common.CswConstants#NAMESPACE_DECLARATIONS}. The new namespace declarations will be added to any
+   * existing ones already in {@code context}.
+   *
+   * @param reader the reader currently at the XML element with namespace declarations you want to
+   *     copy
+   * @param context the {@link UnmarshallingContext} that the namespace declarations will be copied
+   *     to
+   */
+  public static void copyXmlNamespaceDeclarationsIntoContext(
+      HierarchicalStreamReader reader, UnmarshallingContext context) {
+    @SuppressWarnings("unchecked")
+    Map<String, String> namespaces =
+        (Map<String, String>) context.get(CswConstants.NAMESPACE_DECLARATIONS);
+
+    if (namespaces == null) {
+      namespaces = new HashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    Iterator<String> attributeNames = reader.getAttributeNames();
+    while (attributeNames.hasNext()) {
+      String name = attributeNames.next();
+      if (StringUtils.startsWith(name, CswConstants.XMLNS)) {
+        String attributeValue = reader.getAttribute(name);
+        namespaces.put(name, attributeValue);
+      }
+    }
+    if (!namespaces.isEmpty()) {
+      context.put(CswConstants.NAMESPACE_DECLARATIONS, namespaces);
+    }
   }
 }

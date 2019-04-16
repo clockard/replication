@@ -73,14 +73,6 @@ public class GetRecordsMessageBodyReader implements MessageBodyReader<CswRecordC
   private void buildArguments() {
     argumentHolder = xstream.newDataHolder();
     argumentHolder.put(CswConstants.OUTPUT_SCHEMA_PARAMETER, "urn:catalog:metacard");
-    //    argumentHolder.put(CswConstants.CSW_MAPPING, configuration.getMetacardCswMappings());
-    //    argumentHolder.put(CswConstants.AXIS_ORDER_PROPERTY, configuration.getCswAxisOrder());
-    //    argumentHolder.put(Core.RESOURCE_URI,
-    // configuration.getMetacardMapping(Core.RESOURCE_URI));
-    //    argumentHolder.put(Core.THUMBNAIL, configuration.getMetacardMapping(Core.THUMBNAIL));
-    //    argumentHolder.put(CswConstants.TRANSFORMER_LOOKUP_KEY, TransformerManager.SCHEMA);
-    //    argumentHolder.put(CswConstants.TRANSFORMER_LOOKUP_VALUE,
-    // configuration.getOutputSchema());
   }
 
   @Override

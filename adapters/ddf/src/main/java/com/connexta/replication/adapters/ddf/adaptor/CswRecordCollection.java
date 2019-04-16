@@ -13,15 +13,8 @@
  */
 package com.connexta.replication.adapters.ddf.adaptor;
 
-import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import javax.xml.namespace.QName;
-import net.opengis.cat.csw.v_2_0_2.ElementSetType;
-import net.opengis.cat.csw.v_2_0_2.GetRecordsType;
-import net.opengis.cat.csw.v_2_0_2.ResultType;
 import org.codice.ditto.replication.api.data.Metadata;
 
 /**
@@ -32,49 +25,11 @@ import org.codice.ditto.replication.api.data.Metadata;
  */
 public class CswRecordCollection {
 
-  private GetRecordsType request;
-
   private List<Metadata> cswRecords = new ArrayList<>();
 
   private long numberOfRecordsReturned;
 
   private long numberOfRecordsMatched;
-
-  private boolean isById;
-
-  private ElementSetType elementSetType;
-
-  private List<QName> elementName;
-
-  private String outputSchema;
-
-  private String mimeType;
-
-  private int startPosition;
-
-  private ResultType resultType;
-
-  private boolean doWriteNamespaces;
-
-  private Map<String, Serializable> resourceProperties = new HashMap<>();
-
-  /**
-   * Retrieves the request made that generated this set of CSW Records, if applicable
-   *
-   * @return the {@link GetRecordsType} request
-   */
-  public GetRecordsType getRequest() {
-    return request;
-  }
-
-  /**
-   * Sets the request used to generate this list of records
-   *
-   * @param request A {@link GetRecordsType} used to generate this request
-   */
-  public void setRequest(GetRecordsType request) {
-    this.request = request;
-  }
 
   /**
    * Retrieves the list of metacards built from the CSW Records returned in a GetRecordsResponse.
@@ -108,77 +63,5 @@ public class CswRecordCollection {
 
   public void setNumberOfRecordsMatched(long numberOfRecordsMatched) {
     this.numberOfRecordsMatched = numberOfRecordsMatched;
-  }
-
-  public boolean isById() {
-    return isById;
-  }
-
-  public void setById(boolean isById) {
-    this.isById = isById;
-  }
-
-  public ElementSetType getElementSetType() {
-    return elementSetType;
-  }
-
-  public void setElementSetType(ElementSetType elementSetType) {
-    this.elementSetType = elementSetType;
-  }
-
-  public List<QName> getElementName() {
-    return elementName;
-  }
-
-  public void setElementName(List<QName> elementName) {
-    this.elementName = elementName;
-  }
-
-  public String getOutputSchema() {
-    return outputSchema;
-  }
-
-  public void setOutputSchema(String outputSchema) {
-    this.outputSchema = outputSchema;
-  }
-
-  public String getMimeType() {
-    return mimeType;
-  }
-
-  public void setMimeType(String mimeType) {
-    this.mimeType = mimeType;
-  }
-
-  public int getStartPosition() {
-    return startPosition;
-  }
-
-  public void setStartPosition(int start) {
-    this.startPosition = start;
-  }
-
-  public ResultType getResultType() {
-    return this.resultType;
-  }
-
-  public void setResultType(ResultType resultType) {
-    this.resultType = resultType;
-  }
-
-  public boolean isDoWriteNamespaces() {
-    return doWriteNamespaces;
-  }
-
-  public void setDoWriteNamespaces(boolean doWriteNamespaces) {
-    this.doWriteNamespaces = doWriteNamespaces;
-  }
-
-  public void setResourceProperties(Map<String, Serializable> resourceProperties) {
-    this.resourceProperties = resourceProperties;
-  }
-
-  public Map<String, Serializable> getResourceProperties() {
-    return this.resourceProperties;
   }
 }

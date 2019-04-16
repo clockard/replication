@@ -25,7 +25,6 @@ import net.opengis.filter.v_1_1_0.SortOrderType;
 import net.opengis.filter.v_1_1_0.SortPropertyType;
 import org.codice.ddf.cxf.client.SecureCxfClientFactory;
 import org.codice.ddf.cxf.client.impl.SecureCxfClientFactoryImpl;
-import org.codice.ddf.spatial.ogc.csw.catalog.common.source.CswResponseExceptionMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

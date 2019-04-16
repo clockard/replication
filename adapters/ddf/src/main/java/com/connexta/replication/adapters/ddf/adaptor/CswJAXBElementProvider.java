@@ -22,7 +22,6 @@ import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 import org.apache.commons.lang.StringUtils;
 import org.apache.cxf.jaxrs.provider.JAXBElementProvider;
-import org.codice.ddf.spatial.ogc.csw.catalog.common.GmdConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,29 +46,14 @@ public class CswJAXBElementProvider<T> extends JAXBElementProvider<T> {
     super();
 
     Map<String, String> prefixes = new HashMap<String, String>();
+    prefixes.put(CswConstants.CSW_OUTPUT_SCHEMA, CswConstants.CSW_NAMESPACE_PREFIX);
+    prefixes.put(CswConstants.OWS_NAMESPACE, CswConstants.OWS_NAMESPACE_PREFIX);
+    prefixes.put(CswConstants.XML_SCHEMA_LANGUAGE, CswConstants.XML_SCHEMA_NAMESPACE_PREFIX);
+    prefixes.put(CswConstants.OGC_SCHEMA, CswConstants.OGC_NAMESPACE_PREFIX);
+    prefixes.put(CswConstants.GML_SCHEMA, CswConstants.GML_NAMESPACE_PREFIX);
+    prefixes.put(CswConstants.DUBLIN_CORE_SCHEMA, CswConstants.DUBLIN_CORE_NAMESPACE_PREFIX);
     prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.CSW_OUTPUT_SCHEMA,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.CSW_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.OWS_NAMESPACE,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.OWS_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.XML_SCHEMA_LANGUAGE,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.XML_SCHEMA_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.OGC_SCHEMA,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.OGC_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.GML_SCHEMA,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.GML_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.DUBLIN_CORE_SCHEMA,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.DUBLIN_CORE_NAMESPACE_PREFIX);
-    prefixes.put(
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants.DUBLIN_CORE_TERMS_SCHEMA,
-        com.connexta.replication.adapters.ddf.adaptor.CswConstants
-            .DUBLIN_CORE_TERMS_NAMESPACE_PREFIX);
-    prefixes.put(GmdConstants.GMD_NAMESPACE, GmdConstants.GMD_PREFIX);
+        CswConstants.DUBLIN_CORE_TERMS_SCHEMA, CswConstants.DUBLIN_CORE_TERMS_NAMESPACE_PREFIX);
 
     setNamespaceMapperPropertyName(NS_MAPPER_PROPERTY_RI);
     setNamespacePrefixes(prefixes);
@@ -83,9 +67,9 @@ public class CswJAXBElementProvider<T> extends JAXBElementProvider<T> {
     String contextPath =
         StringUtils.join(
             new String[] {
-              com.connexta.replication.adapters.ddf.adaptor.CswConstants.OGC_CSW_PACKAGE,
-              com.connexta.replication.adapters.ddf.adaptor.CswConstants.OGC_FILTER_PACKAGE,
-              com.connexta.replication.adapters.ddf.adaptor.CswConstants.OGC_GML_PACKAGE,
+              CswConstants.OGC_CSW_PACKAGE,
+              CswConstants.OGC_FILTER_PACKAGE,
+              CswConstants.OGC_GML_PACKAGE,
               CswConstants.OGC_OWS_PACKAGE
             },
             ":");
