@@ -19,7 +19,6 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 import javax.annotation.Nullable;
 import org.codice.ditto.replication.api.data.Metadata;
 

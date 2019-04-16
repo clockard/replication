@@ -424,14 +424,17 @@ public class DdfNodeAdapter extends AbstractCswStore implements NodeAdapter {
 
     String qualifier = getQualifier(resource.getResourceUri());
 
-    ContentItem contentItem = new ContentItemImpl(
-        resource.getId(),
-        resource.getQualifier(),
-        byteSource,
-        resource.getMimeType(),
-        resource.getName() == null && qualifier != null ? qualifier + ".bin" : resource.getName(),
-        resource.getSize(),
-        (Metacard) resource.getMetadata().getRawMetadata());
+    ContentItem contentItem =
+        new ContentItemImpl(
+            resource.getId(),
+            resource.getQualifier(),
+            byteSource,
+            resource.getMimeType(),
+            resource.getName() == null && qualifier != null
+                ? qualifier + ".bin"
+                : resource.getName(),
+            resource.getSize(),
+            (Metacard) resource.getMetadata().getRawMetadata());
 
     if (qualifier != null) {
       addDerivedResourceUriToMetacard(contentItem);
